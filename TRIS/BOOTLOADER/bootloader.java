@@ -2,8 +2,8 @@ package tris;
 
 import android.app.Activity;
 import android.os.Bundle;
-import android.view.SurfaceView;
 import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 
 public class bootloader extends Activity {
     static { System.loadLibrary("tris"); }
@@ -11,34 +11,88 @@ public class bootloader extends Activity {
     private native void nativeInit(Object surface);
     private native void nativeFrame(float dt);
 
+    private SurfaceView surfaceView;
+    private Thread renderThread;
+    private volatile boolean running = false;
+
     @Override
-    protected void onCreate(Bundle b) {
-        super.onCreate(b);
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
 
-        SurfaceView sv = new SurfaceView(this);
-        setContentView(sv);
+        surfaceView = new SurfaceView(this);
+        setContentView(surfaceView);
 
-        sv.getHolder().addCallback(new SurfaceHolder.Callback() {
+        surfaceView.getHolder().addCallback(new SurfaceHolder.Callback() {
             @Override
             public void surfaceCreated(SurfaceHolder holder) {
                 nativeInit(holder.getSurface());
+                startRenderLoop();
             }
 
-            @Override public void surfaceChanged(SurfaceHolder h, int f, int w, int h2) {}
-            @Override public void surfaceDestroyed(SurfaceHolder h) {}
-        });
+            @Override
+            public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+                // Nessuna azione richiesta qui.
+            }
 
-        new Thread(() -> {
+            @Override
+            public void surfaceDestroyed(SurfaceHolder holder) {
+                stopRenderLoop();
+            }
+        });
+    }
+
+    private void startRenderLoop() {
+        if (renderThread != null && renderThread.isAlive()) {
+            return;
+        }
+
+        running = true;
+        renderThread = new Thread(() -> {
             long last = System.nanoTime();
-            while (true) {
+            while (running) {
                 long now = System.nanoTime();
                 float dt = (now - last) / 1e9f;
                 last = now;
 
                 nativeFrame(dt);
 
-                try { Thread.sleep(16); } catch (Exception e) {}
+                try {
+                    Thread.sleep(16);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
             }
-        }).start();
+        }, "tris-render-thread");
+
+        renderThread.start();
+    }
+
+    private void stopRenderLoop() {
+        running = false;
+        if (renderThread != null) {
+            renderThread.interrupt();
+            renderThread = null;
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        stopRenderLoop();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (surfaceView != null && surfaceView.getHolder().getSurface() != null) {
+            startRenderLoop();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        stopRenderLoop();
+        super.onDestroy();
     }
 }
