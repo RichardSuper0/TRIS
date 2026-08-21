@@ -1,0 +1,8 @@
+{
+      "name": "Gentoo x64 UltraOptimized FASM",
+        "build": {
+            "dockerfile": "Dockerfile"
+              },
+                "remoteUser": "dev"
+            }
+            
